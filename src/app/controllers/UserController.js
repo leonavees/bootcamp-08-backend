@@ -1,20 +1,10 @@
-import * as yup from 'yup';
-
 import User from '../models/User';
 import File from '../models/File';
 
+import Cache from '../../lib/Cache';
+
 class UserController {
     async store(req, res) {
-        const schema = yup.object().shape({
-            name: yup.string().required(),
-            email: yup.string().email().required(),
-            password: yup.string().required().min(6),
-        });
-
-        if (!(await schema.isValid(req.body))) {
-            return res.status(400).json({ error: 'Validation fails' });
-        }
-
         const userExists = await User.findOne({
             where: {
                 email: req.body.email,
@@ -27,33 +17,14 @@ class UserController {
 
         const { id, name, email, provider } = await User.create(req.body);
 
+        if (provider) {
+            await Cache.invalidate('providers');
+        }
+
         return res.status(201).json({ id, name, email, provider });
     }
 
     async update(req, res) {
-        const schema = yup.object().shape({
-            name: yup.string(),
-            email: yup.string().email(),
-            oldPassword: yup.string().min(6),
-            password: yup
-                .string()
-                .min(6)
-                .when('oldPassword', (oldPassword, field) =>
-                    oldPassword ? field.required() : field
-                ),
-            confirmPassword: yup
-                .string()
-                .when('password', (password, field) =>
-                    password
-                        ? field.required().oneOf([yup.ref('password')])
-                        : field
-                ),
-        });
-
-        if (!(await schema.isValid(req.body))) {
-            return res.status(400).json({ error: 'Validation fails' });
-        }
-
         const { email, oldPassword } = req.body;
 
         const user = await User.findByPk(req.userId);
